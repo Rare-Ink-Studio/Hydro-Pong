@@ -1,0 +1,164 @@
+--- a/play/hydro-pong/index.html
++++ b/play/hydro-pong/index.html
+@@ -150,6 +150,13 @@
+ @media(max-height:500px){#welcomeBox{max-height:calc(100dvh - 20px);grid-template-columns:1fr 1.15fr}#welcome{padding:10px}.hp-hero{min-height:420px}#ui{top:7px}#score{padding:5px 10px}.hp-score-side strong{font-size:22px}#title{padding:2px 0}#gameControls{top:61px}#gameControls button,#gameControls a{padding:7px 10px;font-size:11px}#aimControls{bottom:39px;padding:4px}#aimControls button{padding:6px 10px}#message{bottom:4px;padding:4px 8px;font-size:11px}#pausePanel>div,.hp-result{padding:20px}.hp-result h2{font-size:28px}.hp-final-score{font-size:38px;margin:10px 0}#winBanner .hp-result-subtitle{margin:6px 0 10px}#winBanner button{margin-top:12px}}
+ @media(prefers-reduced-motion:reduce){#welcomeBox{animation:none}.charBtn{transition:none}.charBtn:active,.menuButton:active,#playBtn:active{transform:none}}
+ 
++#shotCoach{position:fixed;right:14px;top:140px;z-index:12;width:260px;box-sizing:border-box;padding:10px 12px;border:1px solid #a8cfc2;border-left:4px solid #eea151;border-radius:9px;background:#103c44f2;color:#fff3da;pointer-events:none;box-shadow:0 5px 18px #001a2844}
++#shotCoach[hidden]{display:none}#shotCoach b{display:block;font-size:9px;letter-spacing:.13em;text-transform:uppercase;color:#ffd394}#shotCoach p{font-size:12px;line-height:1.45;margin:5px 0 0}#guideBtn[aria-pressed="true"]{background:#c7eadf;border-color:#136b73}
++#winBanner .hp-shot-total{font:13px/1.5 Arial,sans-serif;color:#37595a;display:block;margin-top:12px}
++@media(max-width:700px){#shotCoach{left:10px;right:auto;top:132px;width:252px;padding:8px 10px}#shotCoach p{font-size:11px}#gameControls{max-width:calc(100vw - 20px)}#gameControls #guideBtn{font-size:11px;padding:8px}}
++@media(max-height:500px){#shotCoach{left:auto;right:14px;top:61px;width:240px;padding:7px 10px}#shotCoach p{font-size:10px;margin-top:3px}#shotCoach b{font-size:8px}}
++@media(max-width:360px){#gameControls button,#gameControls a,#gameControls #guideBtn{font-size:10px;padding:8px 5px;min-width:44px}#gameControls{gap:4px}}
++
+ </style>
+ </head>
+ <body>
+@@ -209,6 +216,7 @@
+ <button id="reset" type="button">Restart</button>
+ <button id="pauseBtn" type="button" disabled>Pause</button>
+ <button id="musicBtn" type="button" aria-pressed="false">Sound: Off</button>
++<button id="guideBtn" type="button" aria-pressed="false">Guide: Off</button>
+ <a href="/?oh_return=ohPlayPage">Arcade</a>
+ </nav>
+ <div id="aimControls" aria-label="Shot controls" hidden>
+@@ -221,6 +229,7 @@
+ </div>
+ <div id="pausePanel" role="dialog" aria-modal="true" aria-labelledby="pauseTitle"><div><div class="hp-kicker">Take a breather</div><h2 id="pauseTitle">Paused</h2><p>Your match is saved here. Ready for the next splash?</p><button id="resumeBtn" type="button">Resume</button><p><a href="/?oh_return=ohPlayPage" style="color:white">Back to Arcade</a></p></div></div>
+ <div id="message" role="status" aria-live="polite">Choose your characters, then press Start Match.</div>
++<aside id="shotCoach" hidden aria-label="Shot feedback"><b id="shotCoachLabel">Shot guide</b><p id="shotCoachText" role="status" aria-live="polite"></p></aside>
+ <div id="winBanner" role="dialog" aria-modal="true" aria-labelledby="hpResultTitle">FULLY HYDRATED! 💦<span>You win!</span></div>
+ <canvas id="game" tabindex="0" aria-label="Hydro Pong playfield. Arrow keys aim and adjust power; Space shoots; P pauses." aria-describedby="welcomeSmall"></canvas>
+ 
+@@ -258,6 +267,7 @@
+ let musicMuted=true;
+ let paused=false,gameOver=false,shotReady=false,activePointer=null;
+ let aimAngle=0,aimPower=50;
++let guideEnabled=false,playerShots=0,lastShot=null,shotReview=null;
+ let gameTime=0,scheduled=[],lastFrame=null,accumulator=0;
+ const STEP=1000/60;
+ const reducedMotion=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+@@ -641,6 +651,7 @@
+   document.getElementById('gameControls').inert=false;aimControls.inert=false;canvas.tabIndex=0;
+   winBanner.style.display="none";
+   playerScore=0;
++  playerShots=0;lastShot=null;shotReview=null;
+   rivalScore=0;
+   turn="player";
+   dragging=false;
+@@ -663,6 +674,7 @@
+   say(rivalPin,"Don't miss.");
+   message.innerText=gameStarted?"Pull back from the ball, then release. Or use arrows + Space. P pauses.":"Choose your characters, then press Start Match.";
+   aimControls.hidden=!gameStarted;updateAimControls();syncAudio();
++  showShotNote('Shot guide',guideEnabled?'Gold marks the predicted finish. Aim for a cup, then adjust power.':'');
+ }
+ 
+ function setupCrowd(){
+@@ -1069,10 +1081,49 @@
+   const length=aimPower*(isMobile?.30:.75),angle=aimAngle*Math.PI/180;
+   return {dx:Math.cos(angle)*length,dy:Math.sin(angle)*length};
+ }
++function showShotNote(label,text){
++  document.getElementById('shotCoach').hidden=!text||!gameStarted;
++  document.getElementById('shotCoachLabel').textContent=label;
++  document.getElementById('shotCoachText').textContent=text;
++}
++document.getElementById('guideBtn').onclick=()=>{
++  guideEnabled=!guideEnabled;
++  document.getElementById('guideBtn').textContent='Guide: '+(guideEnabled?'On':'Off');
++  document.getElementById('guideBtn').setAttribute('aria-pressed',String(guideEnabled));
++  if(!lastShot)showShotNote('Shot guide',guideEnabled?'Gold marks the predicted finish. A ring means cup; a cross means miss.':'');
++};
++// Read-only trajectory preview. Mirrors the fixed-step flight, bounce and hit order.
++function previewShot(origin,pull){
++  const p={x:origin.x,y:origin.y,z:0,...shotVector(pull.dx,pull.dy),bounced:false};
++  const path=[],surface=tableSurfaceRect();let result='miss',target=null;
++  for(let frame=0;frame<180;frame++){
++    p.vz-=GRAVITY;p.x+=p.vx;p.y+=p.vy;p.z+=p.vz;
++    if(frame%3===0)path.push({x:p.x,y:p.y-p.z});
++    target=rivalCups.find(c=>!c.hit&&((Math.hypot(p.x-c.x,p.y-(c.y-25))<CUP_OPENING&&p.z<48&&p.z>-10)||(Math.hypot(p.x-c.x,p.y-(c.y-25))<CUP_ASSIST&&p.z<30&&p.z>-10&&p.bounced)));
++    if(target){result='cup';break;}
++    if(Math.hypot(p.x-rivalPin.x,p.y-p.z-rivalPin.y)<(smallScreen?60:(isMobile?78:130))){result='soak';break;}
++    const onTable=p.x>surface.x&&p.x<surface.x+surface.w&&p.y>surface.y&&p.y<surface.y+surface.h;
++    if(p.z<=0&&onTable&&!p.bounced){p.z=0;p.vz=isMobile?7.6:9.2;p.vx*=.78;p.vy*=.78;p.bounced=true;}
++    if((p.z<=-18&&p.bounced)||p.x<-120||p.x>W+120||p.y<-120||p.y>H+120||p.z<-100)break;
++  }
++  return {path,result,x:target?target.x:p.x,y:target?target.y-25:p.y-p.z};
++}
+ function drawAim(){
+   if(!gameStarted||gameOver||!shotReady||turn!=="player"||ball.active||ball.sinking)return;
+   const origin=dragging?dragStart:{x:ball.x,y:ball.y};
+   const pull=dragging?{dx:dragStart.x-dragNow.x,dy:dragStart.y-dragNow.y}:keyboardPull();
++  if(guideEnabled){
++    const guide=previewShot(origin,pull);
++    ctx.save();ctx.strokeStyle='#ffda85';ctx.fillStyle='#ffda85';ctx.lineWidth=2;
++    for(const dot of guide.path){ctx.beginPath();ctx.arc(dot.x,dot.y,2.5,0,Math.PI*2);ctx.fill();}
++    const x=Math.max(16,Math.min(W-16,guide.x)),y=Math.max(150,Math.min(H-120,guide.y));
++    ctx.shadowColor='#082f3d';ctx.shadowBlur=4;
++    ctx.beginPath();ctx.ellipse(x,y,15,9,0,0,Math.PI*2);ctx.stroke();
++    if(guide.result!=='cup'){ctx.beginPath();ctx.moveTo(x-6,y-6);ctx.lineTo(x+6,y+6);ctx.moveTo(x+6,y-6);ctx.lineTo(x-6,y+6);ctx.stroke();}
++    ctx.font='bold 11px Arial';ctx.textAlign='center';
++    ctx.fillText(guide.result==='cup'?'CUP':guide.result==='soak'?'SOAK / NO POINT':'MISS',x,y-17);
++    ctx.restore();return;
++  }
+   const velocity=shotVector(pull.dx,pull.dy);
+   let x=origin.x,y=origin.y,z=0,vz=velocity.vz;
+   ctx.fillStyle="rgba(255,255,255,.9)";
+@@ -1112,6 +1163,8 @@
+ function launchShot(dx,dy,origin){
+   if(!canShoot())return;
+   if(Math.hypot(dx,dy)<1)return;
++  playerShots++;shotReview={nearest:null,nearestLow:null};lastShot=null;
++  showShotNote('Shot '+playerShots,'Ball in flight. Watch where it reaches rim height.');
+   shotReady=false;updateAimControls();
+   Object.assign(ball,{x:origin.x,y:origin.y,z:0,...shotVector(dx,dy),active:true,owner:"player",bounced:false,sinking:false});
+   ballTrail=[];say(playerPin,"Hydro shot!");message.innerText="HYDRO SHOT!";sfx("throw");
+@@ -1220,6 +1273,11 @@
+   for(const c of targetCups){
+     if(c.hit)continue;
+     const d=Math.hypot(ball.x-c.x,ball.y-(c.y-25));
++    if(ball.owner==='player'&&shotReview){
++      const sample={d,dx:ball.x-c.x,dy:ball.y-(c.y-25),z:ball.z};
++      if(!shotReview.nearest||d<shotReview.nearest.d)shotReview.nearest=sample;
++      if(ball.z<48&&ball.z>-10&&(!shotReview.nearestLow||d<shotReview.nearestLow.d))shotReview.nearestLow=sample;
++    }
+ 
+     if((d<CUP_OPENING&&ball.z<48&&ball.z>-10)||(d<CUP_ASSIST&&ball.z<30&&ball.z>-10&&ball.bounced)){
+       startSink(c);
+@@ -1271,6 +1329,8 @@
+   sfx("hit");
+ 
+   if(pin===rivalPin){
++    lastShot='Rival soaked! Character hits are for fun; cups earn points.';
++    showShotNote('Your shot / soaked',lastShot);
+     say(rivalPin,"I'M SOAKED!");
+     say(playerPin,"HYDRATED!");
+     message.innerText="DIRECT HIT! Rival drenched!";
+@@ -1325,6 +1385,8 @@
+ 
+   if(owner==="player"){
+     playerScore++;
++    lastShot=`Cup sunk. ${6-playerScore} ${6-playerScore===1?'cup':'cups'} left to win.`;
++    showShotNote('Your shot / cup',lastShot);
+     say(playerPin,"Hydrated!");
+     say(rivalPin,"Lucky.");
+     message.innerText="SPLASH! You scored!";
+@@ -1356,6 +1418,9 @@
+   sfx("miss");
+ 
+   if(ball.owner==="player"){
++    const near=shotReview?.nearest,low=shotReview?.nearestLow;
++    lastShot=near&&near.d<CUP_OPENING&&near.z>=48?'Over the rim while too high. Try less power to reach the cups lower.':!low?'Outside the cup area. Turn on the guide and bring the finish toward a cup.':Math.abs(low.dy)>Math.abs(low.dx)?(low.dy<0?'Above the nearest cup at rim height. Aim a little lower.':'Below the nearest cup at rim height. Aim a little higher.'):(low.dx<0?'Short of the nearest cup at rim height. Try a little more power.':'Past the nearest cup at rim height. Try a little less power.');
++    showShotNote('Your shot / missed',lastShot);
+     say(rivalPin,"Weak shot.");
+     message.innerText="Miss! Rival turn.";
+     scheduleGame(rivalThrow,850);
+@@ -1373,6 +1438,8 @@
+   document.getElementById('gameControls').inert=true;aimControls.inert=true;canvas.tabIndex=-1;
+   winBanner.innerHTML='<div class="hp-result"><div class="hp-kicker">Rollie’s / Match complete</div><h2 id="hpResultTitle">'+big+'</h2><span class="hp-result-subtitle">'+small+'</span><div class="hp-final-score">'+playerScore+' <span aria-hidden="true">:</span> '+rivalScore+'</div><div class="hp-final-labels">YOU / RIVAL</div><button type="button" id="rematchBtn">Play again</button><br><a href="/?oh_return=ohPlayPage">Back to Arcade</a></div>';
+   winBanner.style.display="flex";makeConfetti();message.innerText="Match complete. Play again for another splash!";sfx("win");
++  const shotTotal=document.createElement('span');shotTotal.className='hp-shot-total';shotTotal.textContent=`Your cups: ${playerScore} from ${playerShots} ${playerShots===1?'shot':'shots'}.`;
++  winBanner.querySelector('.hp-final-labels').after(shotTotal);
+   document.getElementById('rematchBtn').onclick=()=>{resetGame();canvas.focus();};
+   document.getElementById('rematchBtn').focus();
+ }
